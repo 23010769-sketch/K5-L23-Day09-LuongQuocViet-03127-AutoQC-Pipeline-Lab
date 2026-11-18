@@ -77,7 +77,33 @@ Kết quả: nhận 193/224 ảnh, còn **6 lỗi MISSING_LABEL_FILE**, duyệt 
 Hai điểm mù có bằng chứng: (1) pHash không hiểu nội dung nên có thể gộp nhầm cảnh khác nhau (hai cặp ở mục 3); (2) checker bỏ sót box lỏng: ở conf 0,6, recall LOOSE trên calib chỉ 0,20 = 1/5 ca, tức bỏ sót 4/5 ca chèn. Ngoài ra FALSE_POS chỉ có precision 0,31 trên calib, nên không tự xoá nhãn theo model. Không suy diễn rằng hết cảnh báo nghĩa là nhãn sạch; cần người kiểm tra độc lập.
 
 ## 5. Train: raw vs clean (tùy chọn, chấm riêng)
-**Chưa chạy.** `submission/results/` hiện chỉ có `.gitkeep`, chưa có JSON theo seed hay bảng so sánh; lượt này hoàn tất phần lõi, kiểm tra bằng `--no-train`. Chưa có cơ sở kết luận clean tốt hơn raw. **Cần học viên bổ sung:** lý do/kế hoạch train cá nhân nếu muốn làm phần tùy chọn.
+Đã nhập đủ **4 lượt train Colab** từ `D:/Download/results.zip`: `raw_seed0.json`, `raw_seed1.json`, `clean_seed0.json`, `clean_seed1.json`, giữ nguyên từng byte JSON. Bản tải `results (1).zip` có cùng nội dung bốn JSON khi đối chiếu, không phải bộ train khác cần lựa chọn. Đã chạy `python scripts/summarize_results.py` để sinh lại `comparison.md`/`comparison.json`; biểu đồ `comparison.png` lấy từ cùng ZIP sau khi xác nhận hai bảng tổng hợp trong ZIP khớp bản sinh lại.
+
+Cả bốn JSON xác nhận model khởi tạo `yolo26n.pt`, **20 epoch**, batch **16**, `imgsz=640`, seed **0 và 1**, `device="0"` (không xác định được loại GPU thực tế từ JSON). `train_images` là **224 ảnh raw / 193 ảnh clean** theo script; không có log Ultralytics để xác nhận số ảnh/nhãn raw bị bỏ qua khi train. Notebook dùng chung val `data/gold_val` và test `data/test` cho hai biến thể. Hai JSON clean có `manifest_sha1=afe11c0275f80b2a0f689290b357c5bdb6152ca2`, khớp manifest hiện tại sau chuẩn hoá CRLF→LF; cả bốn có hash cấu hình `b8c69ed7653ad6ea2bd1ebe1e9cc5279b0a05b11`, cũng khớp repo.
+
+Kết quả từng lượt (giá trị gốc trong JSON):
+
+| Biến thể | Seed | Ảnh train | mAP50 | mAP50–95 | Precision | Recall |
+|---|---:|---:|---:|---:|---:|---:|
+| raw | 0 | 224 | 0.7256 | 0.5144 | 0.8068 | 0.6291 |
+| raw | 1 | 224 | 0.7259 | 0.5090 | 0.7203 | 0.6689 |
+| clean | 0 | 193 | 0.7277 | 0.4994 | 0.7735 | 0.6226 |
+| clean | 1 | 193 | 0.7311 | 0.4998 | 0.8138 | 0.6159 |
+
+Bảng tổng hợp nguyên số liệu từ `submission/results/comparison.md` (TB ± độ lệch chuẩn mẫu giữa hai seed):
+
+| biến thể | #ảnh train | số seed | map50 (TB ± độ lệch) | map50_95 (TB ± độ lệch) | precision (TB ± độ lệch) | recall (TB ± độ lệch) |
+|---|---|---|---|---|---|---|
+| raw | 224 | 2 | 0.726 ± 0.000 | 0.512 ± 0.004 | 0.764 ± 0.061 | 0.649 ± 0.028 |
+| clean | 193 | 2 | 0.729 ± 0.002 | 0.500 ± 0.000 | 0.794 ± 0.028 | 0.619 ± 0.005 |
+
+Chênh mAP50 (clean − raw) theo bảng là **+0.004**. Đối chiếu cùng seed: **+0.0021** ở seed 0 và **+0.0052** ở seed 1, tức tăng nhất quán về chiều qua hai seed. Tính trực tiếp từ bốn JSON, chênh trung bình là +0.00365 (0,365 điểm phần trăm); độ lệch chuẩn mAP50 raw khoảng 0.0002, clean khoảng 0.0024. Số 0.000 trong bảng là làm tròn, không có nghĩa bằng 0. Mức tăng còn nhỏ, chỉ có hai seed nên chưa đủ kết luận cải thiện ổn định hay có ý nghĩa thống kê.
+
+Các thước đo không cùng cải thiện: mAP50–95 clean giảm ở cả hai seed (**−0.0150**, **−0.0092**, trung bình **−0.0121**); recall cũng giảm (**−0.0065**, **−0.0530**, trung bình **−0.02975**). Precision tăng trung bình khoảng +0.0301 nhưng không nhất quán: seed 0 giảm 0.0333, seed 1 tăng 0.0935. Vì vậy chỉ có bằng chứng clean tăng nhẹ mAP50 trong hai lượt này, không kết luận clean tốt hơn raw trên mọi mặt.
+
+Hai giả thuyết cần kiểm chứng: (1) clean ít hơn 31 ảnh và có ít nhất hai ảnh bị loại nhầm do pHash (mục 3), có thể giảm độ đa dạng/recall; kiểm bằng thí nghiệm kiểm soát chỉ thay cách lọc trùng, giữ cùng model/siêu tham số/seed. (2) raw có 11 cờ LEAK_TEST ở intake; nếu là rò rỉ thật, phép đo raw có thể được lợi từ ảnh gần/trùng test/val; cần đối chiếu các cờ và so sánh với bản train đã loại rò rỉ theo quy tắc cố định, không chọn ngưỡng bằng kết quả test. Hai seed và tập test 100 ảnh theo notebook vẫn hạn chế khả năng khái quát; nên thêm seed khi có điều kiện, không bịa thêm lượt chạy.
+
+Kết quả train **không thay đổi quyết định QC: HOLD**, vì vẫn còn **34/193 ảnh cảnh báo chưa duyệt (17,62% ≥ 10%)**. `clean_v1` tiếp tục là bản nháp để thử nghiệm.
 
 ## 6. Quyết định và ghi chú AI
 Quyết định cuối: **HOLD**, giữ bản xuất là bản nháp. Cần rà soát các trường hợp loại nhầm, thử lại ngưỡng theo đề xuất trong một lượt được cho phép, duyệt/sửa cảnh báo còn lại theo quy trình và chạy lại QC. Nếu vẫn giữ mẫu số 193, phải còn tối đa 19 ảnh cảnh báo chưa duyệt (9,84%, tức giảm ít nhất 15 ảnh so với 34) và 0 lỗi bắt buộc mới đủ điều kiện Release; không thay ngưỡng gate 10% hay ngân sách quy định để ép kết luận.
@@ -86,6 +112,6 @@ Quyết định cuối: **HOLD**, giữ bản xuất là bản nháp. Cần rà 
 - **Kiểm chứng có bằng chứng:** các lượt kiểm thử riêng đạt 14 test `label_format`, 10 test `gate`, 11 test `autofix`, 15 test `second_opinion`; file tạm autofix có dòng trống ở dòng 2 đã cắt đúng dòng 3 theo log và chạy lại không đổi; ảnh tạm có hai dự đoán chỉ sinh một `POSSIBLE_MISSING` cho dự đoán chưa có nhãn. Lượt này đã xem 7 cặp NEAR, đối chiếu CSV/summary/manifest và kiểm tra budget 0 như mục 4.
 - **Một lần AI sai có ghi nhận:** thao tác PowerShell kiểm tra thư mục tạm dùng `Split-Path -LiteralPath ... -Parent` gây `ParameterBindingException`; sau đó đổi sang thuộc tính `DirectoryInfo.Parent.FullName`/`Name` và kiểm tra được. Đây là lỗi thao tác công cụ, chưa có bằng chứng để khẳng định AI từng sai thuật toán module. **Cần học viên xác nhận/bổ sung:** đã tự đọc hiểu từng dòng code, tự xem các cặp ảnh và ghi thêm một lỗi logic AI nếu thực sự đã gặp; không bịa ví dụ để điền mẫu.
 
-Kiểm tra thực tế bằng `python scripts/check_submission.py --no-train` (đặt thư mục tạm pytest trong workspace): **79 passed in 50.39s**; script trả mã 1 với **2 lỗi, 1 cảnh báo**. Cảnh báo là bỏ qua train. Hai lỗi báo file `pipeline/calibrate.py` nhắc `MANIFEST` và `data/calib`: đã xác minh đây là lỗi đối chiếu đường dẫn trên Windows của bộ kiểm tra, vì `str(relative_to(...))` dùng dấu gạch chéo ngược còn danh sách bảo vệ dùng `/`. File `pipeline/calibrate.py` vẫn đúng bản đề, SHA1 chuẩn hoá khớp giá trị ghim `cebe2e719ae48d21f990dea95ea99739db68cfbc`; file calibration được phép đọc tập calib theo GUIDE/RULES. Không sửa script hay file bảo vệ để bỏ qua lỗi. **Cần xác nhận với giảng viên hoặc chạy lại trên Linux/Colab** để có kết quả bộ kiểm tra không vướng lỗi đường dẫn; chưa tuyên bố kiểm tra nộp bài hết lỗi.
+Kiểm tra thực tế bằng `python scripts/check_submission.py` **gồm cả phần train** (đặt thư mục tạm pytest trong workspace): **79 passed in 83.09s**; script trả mã 1 với **2 lỗi, 0 cảnh báo**, không có lỗi kiểm tra kết quả train. Hai lỗi còn lại báo file `pipeline/calibrate.py` nhắc `MANIFEST` và `data/calib`: đã xác minh đây là lỗi đối chiếu đường dẫn trên Windows của bộ kiểm tra, vì `str(relative_to(...))` dùng dấu gạch chéo ngược còn danh sách bảo vệ dùng `/`. File `pipeline/calibrate.py` vẫn đúng bản đề, SHA1 chuẩn hoá khớp giá trị ghim `cebe2e719ae48d21f990dea95ea99739db68cfbc`; file calibration được phép đọc tập calib theo GUIDE/RULES. Không sửa script hay file bảo vệ để bỏ qua lỗi. **Cần xác nhận với giảng viên hoặc chạy lại trên Linux/Colab** để có kết quả bộ kiểm tra không vướng lỗi đường dẫn; chưa tuyên bố kiểm tra nộp bài hết lỗi.
 
 **Cần học viên xác nhận trước khi nộp:** lưu bằng chứng lần chạy trước nếu có; link/tên repo public theo `SUBMISSION.md`, thông tin tác giả commit và nộp LMS. Chưa thực hiện commit/push trong lượt hỗ trợ này. CVAT (tùy chọn): chưa có bằng chứng đã thực hiện.
